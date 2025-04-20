@@ -1,27 +1,45 @@
 // gourei_touban CLI アプリケーションの統合テスト。
 
-use assert_cmd::Command;
-use predicates::prelude::*; // stdout/stderr アサーションに使用
-use std::fs;
-use std::path::PathBuf;
-use tempfile::tempdir; // よりクリーンなテストのセットアップ/ティアダウンのために tempfile を使用
+// `use` で外部クレートやモジュールの機能を取り込みます。
+use assert_cmd::Command; // コマンド実行とアサーション（検証）用クレート
+use predicates::prelude::*; // アサーション用の便利な関数やトレイト群
+use std::fs; // ファイルシステム操作用
+use std::path::PathBuf; // ファイルパス操作用
+use tempfile::tempdir; // 一時ディレクトリ作成用クレート
 
 // 一時ディレクトリ内にダミーの CSV ファイルを作成するヘルパー関数
+// `dir: &tempfile::TempDir` は一時ディレクトリへの不変の参照を受け取ります。
+// `filename: &str` はファイル名（文字列スライス）を受け取ります。
+// `content: &str` はファイル内容（文字列スライス）を受け取ります。
+// `-> PathBuf` は関数の戻り値が `PathBuf` 型（パスを表す構造体）であることを示します。
 fn create_test_csv(dir: &tempfile::TempDir, filename: &str, content: &str) -> PathBuf {
+    // `dir.path()` で一時ディレクトリのパスを取得し、`.join(filename)` でファイル名を結合します。
     let file_path = dir.path().join(filename);
+    // `fs::write` でファイルに内容を書き込みます。
+    // `expect(...)` は `Result` が `Err` の場合にプログラムをパニックさせ、指定したメッセージを表示します。
     fs::write(&file_path, content).expect("テスト CSV の書き込みに失敗しました");
+    // 作成したファイルのパスを返します。
     file_path
 }
 
+// `#[test]` 属性は、この関数がテスト関数であることを示します。
+// `cargo test` コマンドで実行されます。
 #[test]
 fn test_fixed_seed_selection() {
+    // `tempdir().unwrap()` で一時ディレクトリを作成します。
+    // `unwrap()` は `Result` が `Ok(value)` なら `value` を、`Err` ならパニックします。
+    // テストにおいては、セットアップの失敗は即時パニックで問題ないことが多いです。
     let dir = tempdir().unwrap();
     let csv_content = "id,name\n1,Alice\n2,Bob\n3,Charlie\n4,David";
+    // ヘルパー関数を使ってテスト用 CSV ファイルを作成します。
     let file_path = create_test_csv(&dir, "test_students_fixed.csv", csv_content);
 
+    // `Command::cargo_bin("gourei_touban")` でテスト対象のバイナリ（実行可能ファイル）へのパスを取得します。
+    // `.unwrap()` はバイナリが見つからない場合にパニックします。
     let mut cmd = Command::cargo_bin("gourei_touban").unwrap();
+    // `.arg()` でコマンドライン引数を追加します。
     cmd.arg("--file")
-       .arg(file_path.to_str().unwrap())
+       .arg(file_path.to_str().unwrap()) // `PathBuf` を文字列スライス `&str` に変換
        .arg("--seed")
        .arg("42"); // 固定シード
 
@@ -29,6 +47,9 @@ fn test_fixed_seed_selection() {
     // シード 42 での実際のテスト実行に基づいて期待される出力を更新
     let expected_output = "正担当: 1 Alice\n副担当: 3 Charlie\n"; // <-- この行を調整
 
+    // `.assert()` でコマンドの実行結果に対するアサーションを開始します。
+    // `.success()` はコマンドが正常終了（終了コード 0）したことを検証します。
+    // `.stdout(...)` は標準出力が指定した内容と一致することを検証します。
     cmd.assert().success().stdout(expected_output);
 }
 
@@ -41,12 +62,14 @@ fn test_cli_file_argument() {
     let mut cmd = Command::cargo_bin("gourei_touban").unwrap();
     cmd.arg("--file").arg(file_path.to_str().unwrap());
 
-    // ラベルが存在し、出力が正確に 2 行であることを確認します。
+    // `predicate::str::contains(...)` は、出力に特定の文字列が含まれているかを検証する述語（predicate）です。
+    // `.stdout(...)` に述語を渡すことで、より柔軟な検証が可能です。
     cmd.assert()
         .success()
         .stdout(predicate::str::contains("正担当:"))
         .stdout(predicate::str::contains("副担当:"))
-        // 正規表現を使用して、改行で終わる正確に 2 行であることを確認します
+        // `predicate::str::is_match(...)` は正規表現にマッチするかを検証します。
+        // `^.*\n.*\n$` は、何らかの文字（`.*`）が続き改行（`\n`）が2回あり、それで終わる（`$`）パターンです。
         .stdout(predicate::str::is_match("^.*\n.*\n$").unwrap());
 }
 
@@ -58,9 +81,11 @@ fn test_default_file_path() {
     let _default_path = create_test_csv(&dir, "students.csv", csv_content);
 
     let mut cmd = Command::cargo_bin("gourei_touban").unwrap();
-    // テスト用の students.csv を含む一時ディレクトリからコマンドを実行
+    // `.current_dir(...)` でコマンドの実行ディレクトリを変更します。
+    // これにより、デフォルトの "students.csv" が一時ディレクトリ内のものになります。
     cmd.current_dir(dir.path());
 
+    // `.or(...)` は述語を組み合わせ、どちらか一方が真であれば成功とします。
     cmd.assert()
         .success()
         .stdout(predicate::str::contains("正担当: 100 Grace").or(
@@ -77,6 +102,8 @@ fn test_error_file_not_found() {
     let mut cmd = Command::cargo_bin("gourei_touban").unwrap();
     cmd.arg("--file").arg(non_existent_path.to_str().unwrap());
 
+    // `.failure()` はコマンドが異常終了（終了コード 0 以外）したことを検証します。
+    // `.stderr(...)` は標準エラー出力の内容を検証します。
     cmd.assert()
         .failure()
         .stderr(predicate::str::contains("Error: Could not open file"));

@@ -1,16 +1,22 @@
-use clap::Parser;
-use csv::ReaderBuilder;
-use rand::seq::SliceRandom;
-use rand::SeedableRng;
-use std::error::Error;
-use std::fs::File;
-use std::path::PathBuf;
-use std::process;
+// `use` は他のモジュール（クレートやファイル）の機能を取り込む宣言です。
+use clap::Parser; // コマンドライン引数解析用クレート
+use csv::ReaderBuilder; // CSVファイル読み込み用クレート
+use rand::seq::SliceRandom; // スライスからランダムに要素を選ぶ機能
+use rand::SeedableRng; // 乱数生成器のシード設定用
+use std::error::Error; // 標準ライブラリのエラー処理用トレイト
+use std::fs::File; // ファイル操作用
+use std::path::PathBuf; // ファイルパス操作用
+use std::process; // プロセス制御用（終了コードなど）
 
+// `#[derive(...)]` は、指定されたトレイト（振る舞いの定義）を自動実装するマクロです。
+// `Debug` はデバッグ出力用、`Parser` は clap クレートがコマンドライン引数を解析するために必要です。
 #[derive(Parser, Debug)]
+// `#[clap(...)]` は clap クレート固有の属性マクロで、コマンドラインツールの情報を定義します。
 #[clap(author, version, about, long_about = None)]
 struct Args {
     /// 生徒リストCSVファイルへのパス。デフォルトは ./students.csv
+    // `Option<PathBuf>` は、値が存在しない可能性（None）があることを示す型です。
+    // `value_parser` は clap が引数の値を解析する方法を指定します。
     #[clap(short, long, value_parser)]
     file: Option<PathBuf>,
 
@@ -19,46 +25,73 @@ struct Args {
     seed: Option<u64>,
 }
 
+// `serde::Deserialize` は CSV からデータを構造体に変換（デシリアライズ）するために必要です。
+// `Clone` はデータを複製可能にするトレイトです。
 #[derive(Debug, serde::Deserialize, Clone)] // Cloneトレイトを実装
+// `#[serde(deny_unknown_fields)]` は serde クレートの属性で、CSV に定義外の列があるとエラーにします。
 #[serde(deny_unknown_fields)] // 不明なフィールドがあった場合に失敗するようにこの行を追加
 struct Student {
     id: String,
     name: String,
 }
 
+// `main` 関数はプログラムのエントリーポイント（開始地点）です。
+// `-> Result<(), Box<dyn Error>>` は、関数の戻り値の型を示します。
+// `Result` は成功（`Ok`）か失敗（`Err`）を表す型です。
+// `()` は成功時に値がないことを示します（Unit 型）。
+// `Box<dyn Error>` は、任意の型のエラーを保持できる型です（トレイトオブジェクト）。
 fn main() -> Result<(), Box<dyn Error>> {
+    // `run()` 関数の結果を `if let` でパターンマッチングしています。
+    // `Err(e)` であれば、エラー `e` を標準エラー出力に出力し、プロセスを終了します。
     if let Err(e) = run() {
-        eprintln!("{}", e);
-        process::exit(1);
+        eprintln!("{}", e); // `eprintln!` は標準エラー出力へのマクロ
+        process::exit(1); // 終了コード 1 でプロセスを終了
     }
+    // エラーがなければ `Ok(())` を返し、正常終了します。
     Ok(())
 }
 
+// 実際の処理を行う関数。`main` と同じく `Result` を返します。
 fn run() -> Result<(), Box<dyn Error>> {
+    // `Args::parse()` は clap クレートの機能で、コマンドライン引数を解析して `Args` 構造体を生成します。
     let args = Args::parse();
-    // 相対パス、特にデフォルトパスをより堅牢に扱うために canonicalize を使用します。
-    // canonicalize が失敗した場合（例：ファイルがまだ存在しない場合）は、元のパスにフォールバックします。
+    // `args.file` は `Option<PathBuf>` 型です。
+    // `unwrap_or_else` は `Some(value)` なら `value` を、`None` ならクロージャ（`|| ...`）を実行した結果を返します。
+    // ここでは、ファイル指定がなければデフォルトの "./students.csv" を使います。
     let file_path = args.file.unwrap_or_else(|| PathBuf::from("./students.csv"));
+    // `canonicalize()` はパスを絶対パスに正規化しようとします。
+    // 失敗する可能性があるので `unwrap_or_else` で元のパスを使います。
     let canonical_path = file_path.canonicalize().unwrap_or_else(|_| file_path.clone());
 
     // --- CSVファイル読み込み ---
+    // `File::open` は `Result<File, io::Error>` を返します。
+    // `?` 演算子は `Result` が `Ok(value)` なら `value` を、`Err(e)` ならエラー `e` を早期リターンします。
+    // `.map_err(|e| ...)` は `Err` の場合にエラーの種類を変換します。ここでは詳細なエラーメッセージを生成しています。
     let file = File::open(&canonical_path).map_err(|e| {
          format!("Error: Could not open file '{}': {}", canonical_path.display(), e)
     })?;
 
-    // ReaderBuilderの設定: flexibleモードを無効にして列数を強制します
+    // `ReaderBuilder` で CSV リーダーの設定を行います。
     let mut rdr = ReaderBuilder::new()
-        .has_headers(true)
-        .flexible(false) // この行を追加
-        .from_reader(file);
+        .has_headers(true) // ヘッダー行があると指定
+        .flexible(false) // 列数が固定であることを指定
+        .from_reader(file); // ファイルから読み込む
+    // `rdr.deserialize()` は CSV の各行を `Student` 構造体にデシリアライズするイテレータを返します。
+    // `.collect::<Result<_, _>>()` はイテレータの結果を `Vec<Student>` に集約します。
+    // `Result<Vec<Student>, csv::Error>` のような型になります。
+    // `_` は型推論に任せることを示します。
+    // ここでも `map_err` でエラーメッセージを整形し、`?` でエラー処理をしています。
     let students: Vec<Student> = rdr.deserialize().collect::<Result<_, _>>().map_err(|e| {
         format!("Error: Failed to parse CSV file '{}': {}", canonical_path.display(), e)
     })?;
 
     // --- バリデーション ---
+    // `students.is_empty()` でベクタが空かどうかをチェックします。
     if students.is_empty() {
+       // `Err(...)` でエラーを生成し、`.into()` で `Box<dyn Error>` 型に変換して早期リターンします。
        return Err(format!("Error: The student list in '{}' is empty.", canonical_path.display()).into());
     }
+    // `students.len()` でベクタの要素数を取得します。
     if students.len() < 2 {
        return Err(format!(
             "Error: Not enough students in '{}' to select two. Found {}.",
@@ -68,23 +101,32 @@ fn run() -> Result<(), Box<dyn Error>> {
     }
 
     // --- ランダム選択 ---
+    // `match` 式で `args.seed` の値（`Option<u64>`）に応じて処理を分岐します。
     let mut rng = match args.seed {
+        // `Some(seed)` なら、そのシード値で乱数生成器を初期化します。
         Some(seed) => rand::rngs::StdRng::seed_from_u64(seed),
+        // `None` なら、OSのエントロピーソースからシードを取得して初期化します。
         None => rand::rngs::StdRng::from_entropy(),
     };
 
-    // choose_multiple は Vec<&Student> を返すため、Student がデータを所有している場合は clone が必要です。
+    // `students` ベクタ（実際にはそのスライス）から `rng` を使って重複なく 2 要素をランダムに選択します。
+    // `choose_multiple` は要素への参照（`&Student`）のベクタを返すイテレータを生成します。
+    // `collect::<Vec<_>>()` でそのイテレータの結果を `Vec<&Student>` に集約します。
     let chosen_students_refs = students
-        .choose_multiple(&mut rng, 2)
+        .choose_multiple(&mut rng, 2) // `&mut rng` は可変の借用
         .collect::<Vec<_>>();
 
-    // 選択された生徒をクローンして、出力前にデータを所有します
+    // 選択された生徒の参照 (`&Student`) から、実際の `Student` データ をクローン（複製）して新しいベクタ `chosen_students` を作成します。
+    // `.iter()` で参照のイテレータを取得し、`.map(|&s| s.clone())` で各参照 `&s` をデリファレンス（`*s`相当）して `clone()` し、
+    // `.collect::<Vec<_>>()` で `Vec<Student>` に集約します。
     let chosen_students = chosen_students_refs.iter().map(|&s| s.clone()).collect::<Vec<_>>();
 
     // --- 出力 ---
-    // spec.md の「6. その他」に基づき、最初に選ばれた学生を正担当とする
+    // `println!` マクロで標準出力に整形された文字列を出力します。
+    // `{}` はプレースホルダーで、後の引数の値が挿入されます。
     println!("正担当: {} {}", chosen_students[0].id, chosen_students[0].name);
     println!("副担当: {} {}", chosen_students[1].id, chosen_students[1].name);
 
+    // すべて成功した場合、`Ok(())` を返します。
     Ok(())
 }
