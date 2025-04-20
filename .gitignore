@@ -1,11 +1,9 @@
 # Rust target directory
-gourei_touban/target/
+target/
 
 # macOS specific files
 .DS_Store
 *.DS_Store
-gourei_touban/.DS_Store
 
 # Editor specific files (example for VS Code)
 .vscode/
-gourei_touban/.vscode/

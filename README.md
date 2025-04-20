@@ -10,13 +10,13 @@
 
 ### 1. ビルド
 
-プロジェクトディレクトリ (`gourei_touban`) 内で以下のコマンドを実行してビルドします。
+プロジェクトディレクトリ内で以下のコマンドを実行してビルドします。
 
 ```bash
 cargo build
 ```
 
-実行ファイルは `gourei_touban/target/debug/gourei_touban` に生成されます。リリースビルドを行う場合は `cargo build --release` を使用してください。
+実行ファイルは `target/debug/gourei_touban` に生成されます。リリースビルドを行う場合は `cargo build --release` を使用してください。
 
 ### 2. 実行
 
@@ -24,10 +24,9 @@ cargo build
 
 ```bash
 # プロジェクトルートから実行する場合
-./gourei_touban/target/debug/gourei_touban
+./target/debug/gourei_touban
 
 # cargo run を使う場合 (ビルドも自動で行われます)
-cd gourei_touban
 cargo run
 ```
 
@@ -42,7 +41,7 @@ cargo run
 cargo run -- --file /path/to/your/students.csv
 
 # 直接実行する場合
-./gourei_touban/target/debug/gourei_touban --file /path/to/your/students.csv
+./target/debug/gourei_touban --file /path/to/your/students.csv
 ```
 
 ### 4. シード値の指定 (テスト用)
@@ -74,7 +73,7 @@ id,name
 
 ## テスト
 
-プロジェクトディレクトリ (`gourei_touban`) 内で以下のコマンドを実行すると、単体テストおよび統合テストが実行されます。
+プロジェクトディレクトリ内で以下のコマンドを実行すると、単体テストおよび統合テストが実行されます。
 
 ```bash
 cargo test

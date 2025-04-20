@@ -14,9 +14,6 @@ jobs:
   build_and_test:
     name: Build and Test
     runs-on: ubuntu-latest # 実行環境
-    defaults:
-      run:
-        working-directory: ./gourei_touban # cargoコマンドを実行するディレクトリを指定
 
     steps:
     - name: Checkout repository
@@ -35,7 +32,7 @@ jobs:
           ~/.cargo/registry/index/
           ~/.cargo/registry/cache/
           ~/.cargo/git/db/
-          gourei_touban/target/ # targetディレクトリもキャッシュ
+          target/ # targetディレクトリもキャッシュ (パスを修正)
         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }} # キャッシュキー
 
     - name: Build
