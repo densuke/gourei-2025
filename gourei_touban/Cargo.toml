@@ -1,0 +1,17 @@
+[package]
+name = "gourei_touban"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rand = "0.8"
+csv = "1.1"
+clap = { version = "4.0", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] } # Added serde for Student struct
+
+[dev-dependencies]
+assert_cmd = "2.0"
+predicates = "3.0"
+tempfile = "3.3"
