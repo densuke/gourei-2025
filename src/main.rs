@@ -10,17 +10,17 @@ use std::process;
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
-    /// Path to the student list CSV file. Defaults to ./students.csv
+    /// 生徒リストCSVファイルへのパス。デフォルトは ./students.csv
     #[clap(short, long, value_parser)]
     file: Option<PathBuf>,
 
-    /// Seed for the random number generator (for testing)
+    /// 乱数生成器のシード（テスト用）
     #[clap(long, value_parser)]
     seed: Option<u64>,
 }
 
-#[derive(Debug, serde::Deserialize, Clone)] // Added Clone
-#[serde(deny_unknown_fields)] // Add this line to fail on unknown fields
+#[derive(Debug, serde::Deserialize, Clone)] // Cloneトレイトを実装
+#[serde(deny_unknown_fields)] // 不明なフィールドがあった場合に失敗するようにこの行を追加
 struct Student {
     id: String,
     name: String,
@@ -36,26 +36,26 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 fn run() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
-    // Use canonicalize to handle relative paths more robustly, especially for the default.
-    // Fallback to the original path if canonicalization fails (e.g., file doesn't exist yet).
+    // 相対パス、特にデフォルトパスをより堅牢に扱うために canonicalize を使用します。
+    // canonicalize が失敗した場合（例：ファイルがまだ存在しない場合）は、元のパスにフォールバックします。
     let file_path = args.file.unwrap_or_else(|| PathBuf::from("./students.csv"));
     let canonical_path = file_path.canonicalize().unwrap_or_else(|_| file_path.clone());
 
-    // --- CSV File Reading ---
+    // --- CSVファイル読み込み ---
     let file = File::open(&canonical_path).map_err(|e| {
          format!("Error: Could not open file '{}': {}", canonical_path.display(), e)
     })?;
 
-    // Configure ReaderBuilder: disable flexible mode to enforce column count
+    // ReaderBuilderの設定: flexibleモードを無効にして列数を強制します
     let mut rdr = ReaderBuilder::new()
         .has_headers(true)
-        .flexible(false) // Add this line
+        .flexible(false) // この行を追加
         .from_reader(file);
     let students: Vec<Student> = rdr.deserialize().collect::<Result<_, _>>().map_err(|e| {
         format!("Error: Failed to parse CSV file '{}': {}", canonical_path.display(), e)
     })?;
 
-    // --- Validation ---
+    // --- バリデーション ---
     if students.is_empty() {
        return Err(format!("Error: The student list in '{}' is empty.", canonical_path.display()).into());
     }
@@ -67,21 +67,21 @@ fn run() -> Result<(), Box<dyn Error>> {
         ).into());
     }
 
-    // --- Random Selection ---
+    // --- ランダム選択 ---
     let mut rng = match args.seed {
         Some(seed) => rand::rngs::StdRng::seed_from_u64(seed),
         None => rand::rngs::StdRng::from_entropy(),
     };
 
-    // choose_multiple returns a Vec<&Student>, so clone is needed if Student owns data.
+    // choose_multiple は Vec<&Student> を返すため、Student がデータを所有している場合は clone が必要です。
     let chosen_students_refs = students
         .choose_multiple(&mut rng, 2)
         .collect::<Vec<_>>();
 
-    // Clone the selected students to own the data before printing
+    // 選択された生徒をクローンして、出力前にデータを所有します
     let chosen_students = chosen_students_refs.iter().map(|&s| s.clone()).collect::<Vec<_>>();
 
-    // --- Output ---
+    // --- 出力 ---
     // spec.md の「6. その他」に基づき、最初に選ばれた学生を正担当とする
     println!("正担当: {} {}", chosen_students[0].id, chosen_students[0].name);
     println!("副担当: {} {}", chosen_students[1].id, chosen_students[1].name);
