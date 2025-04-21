@@ -53,14 +53,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-// 実際の処理を行う関数。`main` と同じく `Result` を返します。
-fn run() -> Result<(), Box<dyn Error>> {
-    // `Args::parse()` は clap クレートの機能で、コマンドライン引数を解析して `Args` 構造体を生成します。
-    let args = Args::parse();
-
-    // ファイルパスの決定ロジックを修正
+// ファイルパスを解決する関数
+// Args 構造体への参照を受け取り、解決された PathBuf またはエラーを返す
+fn resolve_file_path(args: &Args) -> Result<PathBuf, Box<dyn Error>> {
     let file_path = args.input_file // まず位置引数を確認
-        .or(args.file) // 次に --file オプションを確認
+        .clone() // Option<PathBuf> を clone
+        .or_else(|| args.file.clone()) // 次に --file オプションを確認 (こちらも clone)
         .unwrap_or_else(|| {
             let default_path = PathBuf::from("./students.csv");
             // デフォルトパスが使用される場合に警告を出力
@@ -68,12 +66,26 @@ fn run() -> Result<(), Box<dyn Error>> {
                 "Warning: No input file specified via argument or --file option. Using default path: '{}'",
                 default_path.display()
             );
-            default_path // クロージャは PathBuf を返す必要がある
+            default_path
         });
 
-    // `canonicalize()` はパスを絶対パスに正規化しようとします。
-    // 失敗する可能性があるので `unwrap_or_else` で元のパスを使います。
+    // canonicalize は失敗する可能性があるため、エラーを伝播させるか、
+    // もしくは unwrap_or_else で元のパスを使う
+    // ここでは元のパスを使う実装のままにする
     let canonical_path = file_path.canonicalize().unwrap_or_else(|_| file_path.clone());
+
+    // canonical_path を返す前に存在確認を行うことも検討できるが、
+    // File::open でのエラーハンドリングに任せる
+    Ok(canonical_path)
+}
+
+// 実際の処理を行う関数。`main` と同じく `Result` を返します。
+fn run() -> Result<(), Box<dyn Error>> {
+    // `Args::parse()` は clap クレートの機能で、コマンドライン引数を解析して `Args` 構造体を生成します。
+    let args = Args::parse();
+
+    // ファイルパス解決ロジックを呼び出す
+    let canonical_path = resolve_file_path(&args)?;
 
     // --- CSVファイル読み込み ---
     // `File::open` は `Result<File, io::Error>` を返します。
