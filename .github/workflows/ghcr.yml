@@ -65,9 +65,9 @@ jobs:
           # run_id とアーキテクチャ名を使った一時的なタグでプッシュ
           tags: ${{ env.IMAGE_NAME_BASE }}:${{ github.run_id }}-${{ matrix.arch }}
           labels: ${{ steps.meta.outputs.labels }}
-          # キャッシュスコープをプラットフォームで分ける
-          cache-from: type=gha,scope=${{ matrix.platform }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.platform }}
+          # --- キャッシュ設定を一時的にコメントアウト ---
+          # cache-from: type=gha,scope=${{ matrix.platform }}
+          # cache-to: type=gha,mode=max,scope=${{ matrix.platform }}
 
   # --- Push Manifest Job ---
   push-manifest:
