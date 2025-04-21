@@ -1,0 +1,9 @@
+# .dockerignore
+.git
+target/
+Dockerfile
+.dockerignore
+README.md
+spec.md
+LICENSE
+# その他不要なファイルやディレクトリ
