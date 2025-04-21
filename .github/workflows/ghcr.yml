@@ -7,6 +7,14 @@ on:
     types:
       - completed
 
+# --- concurrency 設定を追加 ---
+concurrency:
+  # グループ名をワークフロー名と参照 (ブランチ名やタグ名) で定義
+  # これにより、同じブランチ/タグに対する実行は同時に1つだけになる
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # 同じグループで新しい実行が開始されたら、進行中の実行をキャンセルする
+  cancel-in-progress: true
+
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
