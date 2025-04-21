@@ -3,38 +3,24 @@ name: Docker Publish to GHCR
 
 on:
   workflow_run:
-    workflows: ["Rust CI"] # 既存の Rust ワークフロー名
+    workflows: ["Rust CI"] # rust.yml の name を指定
     types:
       - completed
 
-env:
-  # イメージ名を環境変数で定義
-  IMAGE_NAME_BASE: ghcr.io/${{ github.repository }}
-
 jobs:
-  # --- Native Build Job (using Matrix) ---
-  build-native:
-    name: Build native image (${{ matrix.arch }})
-    # マトリックス戦略を定義
-    strategy:
-      matrix:
-        include:
-          - platform: linux/amd64
-            runner: ubuntu-24.04
-            arch: amd64
-          - platform: linux/arm64
-            runner: ubuntu-24.04-arm
-            arch: arm64
-    runs-on: ${{ matrix.runner }} # マトリックスからランナーを選択
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+  build-and-push:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }} # Rust CI ワークフローが成功した場合のみ実行
     permissions:
       contents: read
-      packages: write # イメージプッシュ権限
-      actions: write # キャッシュ書き込み権限
-    # outputs は不要 (後続ジョブでタグ名を推測するため)
+      packages: write # ghcr.io への書き込み権限
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -46,75 +32,25 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # ラベル抽出 (タグはマニフェスト作成時に生成)
-      # このステップはマトリックスの各インスタンスで実行されるが、
-      # ラベル内容は同じはずなので問題ない
-      - name: Extract labels for Docker
+      - name: Extract metadata (tags, labels) for Docker
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.IMAGE_NAME_BASE }}
-          tags: '' # タグはマニフェスト作成時に生成
-
-      - name: Build and push ${{ matrix.arch }} Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          platforms: ${{ matrix.platform }} # マトリックスからプラットフォームを選択
-          push: true
-          # run_id とアーキテクチャ名を使った一時的なタグでプッシュ
-          tags: ${{ env.IMAGE_NAME_BASE }}:${{ github.run_id }}-${{ matrix.arch }}
-          labels: ${{ steps.meta.outputs.labels }}
-          # --- キャッシュ設定を一時的にコメントアウト ---
-          # cache-from: type=gha,scope=${{ matrix.platform }}
-          # cache-to: type=gha,mode=max,scope=${{ matrix.platform }}
-
-  # --- Push Manifest Job ---
-  push-manifest:
-    name: Push manifest list
-    runs-on: ubuntu-24.04 # マニフェスト操作は amd64 ランナーで OK
-    # build-native ジョブ (マトリックス全体) の完了を待つ
-    needs: [build-native]
-    permissions:
-      contents: read # メタデータ抽出のため
-      packages: write # マニフェストプッシュ権限
-    steps:
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      # 最終的なタグ (latest, semver など) を抽出
-      - name: Extract final metadata (tags) for Docker
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.IMAGE_NAME_BASE }}
+          images: ghcr.io/${{ github.repository }}
           tags: |
             type=sha,prefix=
             type=ref,event=branch
             type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            # main ブランチへのプッシュ時に latest タグを付与
-            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
 
-      - name: Create and push manifest list
-        # build-native ジョブでプッシュされた一時タグ名を組み立てる
-        env:
-          AMD64_IMAGE: ${{ env.IMAGE_NAME_BASE }}:${{ github.run_id }}-amd64
-          ARM64_IMAGE: ${{ env.IMAGE_NAME_BASE }}:${{ github.run_id }}-arm64
-        run: |
-          # metadata-action が出力するタグ (改行区切り) をループ処理
-          echo "${{ steps.meta.outputs.tags }}" | while IFS= read -r tag; do
-            if [[ -z "$tag" ]]; then continue; fi # 空行はスキップ
-            echo "Processing tag: $tag"
-            echo "Creating manifest $tag pointing to $AMD64_IMAGE and $ARM64_IMAGE"
-            # マニフェストリストを作成 (既存の場合は上書きされる)
-            docker manifest create "$tag" "$AMD64_IMAGE" "$ARM64_IMAGE"
-            # 必要であればここでマニフェストに注釈を追加 (例: docker manifest annotate)
-            echo "Pushing manifest $tag"
-            docker manifest push "$tag"
-          done
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64 # マルチアーキテクチャビルド
+          push: true
+          tags: | # 修正: metadata-action のタグと latest タグを両方使う
+            ${{ steps.meta.outputs.tags }}
+            ghcr.io/${{ github.repository }}:latest
+          labels: ${{ steps.meta.outputs.labels }}
