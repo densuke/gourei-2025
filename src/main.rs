@@ -61,7 +61,15 @@ fn run() -> Result<(), Box<dyn Error>> {
     // ファイルパスの決定ロジックを修正
     let file_path = args.input_file // まず位置引数を確認
         .or(args.file) // 次に --file オプションを確認
-        .unwrap_or_else(|| PathBuf::from("./students.csv")); // どちらもなければデフォルト
+        .unwrap_or_else(|| {
+            let default_path = PathBuf::from("./students.csv");
+            // デフォルトパスが使用される場合に警告を出力
+            eprintln!(
+                "Warning: No input file specified via argument or --file option. Using default path: '{}'",
+                default_path.display()
+            );
+            default_path // クロージャは PathBuf を返す必要がある
+        });
 
     // `canonicalize()` はパスを絶対パスに正規化しようとします。
     // 失敗する可能性があるので `unwrap_or_else` で元のパスを使います。
