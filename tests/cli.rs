@@ -195,3 +195,26 @@ fn test_error_csv_format_wrong_columns() {
         .failure()
         .stderr(predicate::str::contains("Error: Failed to parse CSV file")); // アサーションは同じですが、動作は一致するはずです
 }
+
+#[test]
+fn test_positional_file_argument() {
+    let dir = tempdir().unwrap();
+    let csv_content = "id,name\npos1,PositionalArgUser1\npos2,PositionalArgUser2";
+    let file_path = create_test_csv(&dir, "positional_test.csv", csv_content);
+
+    let mut cmd = Command::cargo_bin("gourei_touban").unwrap();
+    // オプション名なしでファイルパスを直接渡す
+    cmd.arg(file_path.to_str().unwrap());
+
+    // コマンドが成功し、指定したファイルから読み込んだ内容が出力されることを確認
+    cmd.assert()
+        .success()
+        .stdout(
+            predicate::str::contains("正担当: pos1 PositionalArgUser1")
+                .or(predicate::str::contains("正担当: pos2 PositionalArgUser2")),
+        )
+        .stdout(
+            predicate::str::contains("副担当: pos1 PositionalArgUser1")
+                .or(predicate::str::contains("副担当: pos2 PositionalArgUser2")),
+        );
+}

@@ -14,10 +14,12 @@ use std::process; // プロセス制御用（終了コードなど）
 // `#[clap(...)]` は clap クレート固有の属性マクロで、コマンドラインツールの情報を定義します。
 #[clap(author, version, about, long_about = None)]
 struct Args {
-    /// 生徒リストCSVファイルへのパス。デフォルトは ./students.csv
-    // `Option<PathBuf>` は、値が存在しない可能性（None）があることを示す型です。
-    // `value_parser` は clap が引数の値を解析する方法を指定します。
-    #[clap(short, long, value_parser)]
+    /// 使用する生徒リストCSVファイル (オプションなしで直接指定)
+    #[clap(value_parser)] // 位置引数として設定
+    input_file: Option<PathBuf>,
+
+    /// 生徒リストCSVファイルへのパス (オプション)
+    #[clap(short, long, value_parser, help = "生徒リストCSVファイルへのパス (オプション)")] // help を追加して明確化
     file: Option<PathBuf>,
 
     /// 乱数生成器のシード（テスト用）
@@ -55,10 +57,12 @@ fn main() -> Result<(), Box<dyn Error>> {
 fn run() -> Result<(), Box<dyn Error>> {
     // `Args::parse()` は clap クレートの機能で、コマンドライン引数を解析して `Args` 構造体を生成します。
     let args = Args::parse();
-    // `args.file` は `Option<PathBuf>` 型です。
-    // `unwrap_or_else` は `Some(value)` なら `value` を、`None` ならクロージャ（`|| ...`）を実行した結果を返します。
-    // ここでは、ファイル指定がなければデフォルトの "./students.csv" を使います。
-    let file_path = args.file.unwrap_or_else(|| PathBuf::from("./students.csv"));
+
+    // ファイルパスの決定ロジックを修正
+    let file_path = args.input_file // まず位置引数を確認
+        .or(args.file) // 次に --file オプションを確認
+        .unwrap_or_else(|| PathBuf::from("./students.csv")); // どちらもなければデフォルト
+
     // `canonicalize()` はパスを絶対パスに正規化しようとします。
     // 失敗する可能性があるので `unwrap_or_else` で元のパスを使います。
     let canonical_path = file_path.canonicalize().unwrap_or_else(|_| file_path.clone());
